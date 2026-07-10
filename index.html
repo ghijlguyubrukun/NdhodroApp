@@ -53,13 +53,13 @@
 </head>
 <body class="bg-slate-50 text-slate-800">
   <!-- PRELOADER FAST LOADING -->
-  <div id="app-preloader" style="position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:#f8fafc;z-index:9999;font-family:sans-serif;color:#64748b;transition:opacity 0.3s ease;">
-     <svg style="width:40px;height:40px;animation:spin 1s linear infinite;margin-bottom:16px;color:#4f46e5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" stroke-opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-     <span style="font-weight:bold;letter-spacing:0.05em;font-size:12px;">MEMUAT APLIKASI...</span>
-     <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+  <div id="root">
+    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#64748b;">
+       <svg style="width:40px;height:40px;animation:spin 1s linear infinite;margin-bottom:16px;color:#4f46e5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" stroke-opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+       <span style="font-weight:bold;letter-spacing:0.05em;font-size:12px;">MEMUAT APLIKASI...</span>
+       <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+    </div>
   </div>
-  
-  <div id="root"></div>
 
   <script type="text/babel" data-presets="env,react">
     const { useState, useEffect } = React;
@@ -201,6 +201,7 @@
         nominalRonda: 25000, 
         ttdKetua: 'Ketua Pengurus',
         ttdBendahara: 'Bendahara Kas',
+        ttdSekretaris: 'Sekretaris / Notulis',
         themeColor: 'indigo',
         darkMode: false,
         logoWeb: '',
@@ -210,6 +211,39 @@
     };
 
     // --- FUNGSI HELPER GLOBAL ---
+
+    // Fungsi Pengaman Login Persisten Kuat (Double Storage Check)
+    const getPersistentUser = () => {
+      try {
+        let savedUser = localStorage.getItem('SISTEM_WARGA_USER');
+        if (!savedUser) {
+           const match = document.cookie.match(new RegExp('(^| )SISTEM_WARGA_USER=([^;]+)'));
+           if (match) savedUser = decodeURIComponent(match[2]);
+        }
+        if (savedUser) {
+           const parsed = JSON.parse(savedUser);
+           if (parsed && parsed.role) return parsed;
+        }
+      } catch (e) {
+        console.warn("Failed to restore user session");
+      }
+      return WARGA_USER;
+    };
+
+    const setPersistentUser = (user) => {
+      try {
+         if (user.role !== ROLES.WARGA) {
+            const userStr = JSON.stringify(user);
+            localStorage.setItem('SISTEM_WARGA_USER', userStr);
+            document.cookie = `SISTEM_WARGA_USER=${encodeURIComponent(userStr)}; max-age=31536000; path=/; SameSite=Lax`;
+         } else {
+            localStorage.removeItem('SISTEM_WARGA_USER');
+            document.cookie = `SISTEM_WARGA_USER=; max-age=0; path=/; SameSite=Lax`;
+         }
+      } catch (e) {
+         console.warn("Failed to save user session");
+      }
+    };
 
     // Helper Tanggal ke format DD-MM-YYYY
     const formatDate = (dateStr) => {
@@ -277,7 +311,7 @@
     };
 
     const formatRupiah = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Number(angka) || 0);
-    const hitungSaldo = (transaksi) => (Array.isArray(transaksi) ? transaksi : []).reduce((tot, item) => item.jenis === 'Pemasukan' ? tot + Number(item.nominal) : tot - Number(item.nominal), 0);
+    const hitungSaldo = (transaksi) => (transaksi || []).reduce((tot, item) => item.jenis === 'Pemasukan' ? tot + Number(item.nominal) : tot - Number(item.nominal), 0);
 
     const getDaysInMonth = (monthStr, year) => {
       const monthIdx = bulanListGlobal.indexOf(monthStr);
@@ -332,6 +366,9 @@
           } else if (moduleName === 'inventaris') {
             ttdBendaharaLabel = "Seksi Perlengkapan / Inventaris";
             ttdBendaharaName = appData.settings?.ttdInventaris || '___________________';
+          } else if (moduleName === 'notulen') {
+            ttdBendaharaLabel = "Sekretaris / Notulis";
+            ttdBendaharaName = appData.settings?.ttdSekretaris || '___________________';
           }
 
           tableHTML += `<tfoot>
@@ -381,6 +418,9 @@
       } else if (moduleName === 'inventaris') {
         ttdBendaharaLabel = "Seksi Perlengkapan / Inventaris";
         ttdBendaharaName = appData.settings?.ttdInventaris || '___________________';
+      } else if (moduleName === 'notulen') {
+        ttdBendaharaLabel = "Sekretaris / Notulis";
+        ttdBendaharaName = appData.settings?.ttdSekretaris || '___________________';
       }
 
       return (
@@ -420,15 +460,10 @@
       );
     };
 
-    const SyncStatusWidget = ({ apiUrl, isSyncing }) => {
+    const SyncStatusWidget = ({ apiUrl }) => {
       if (!apiUrl) return (
         <div className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-3 py-1.5 rounded-full border border-rose-200 dark:border-rose-800 shadow-sm" title="URL Google Apps Script belum disetel. Data hanya tersimpan di perangkat ini.">
           <CloudOff className="w-3.5 h-3.5" /> Cloud Belum Disetel
-        </div>
-      );
-      if (isSyncing) return (
-        <div className="hidden md:flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-800 shadow-sm">
-          <RefreshCcw className="w-3.5 h-3.5 animate-spin" /> Menyinkronkan...
         </div>
       );
       return (
@@ -507,40 +542,52 @@
       );
     };
 
-    const DataManager = ({ title, moduleName, columns, data, onShareWA, openFormModal, handleDeleteItem, appData, activeTheme, currentUser }) => {
+    const DataManager = ({ title, moduleName, columns, data, onShareWA, openFormModal, handleDeleteItem, appData, activeTheme, currentUser, hasPDF, hasExcel }) => {
       const isReadOnly = currentUser.role === ROLES.WARGA;
+
+      const triggerExport = () => {
+         exportToXLS(title, columns, data, appData, moduleName);
+      };
 
       return (
         <div className={`rounded-xl shadow-sm border p-6 transition-all ${appData.settings?.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 print:mb-4">
             <div>
               <h2 className="text-xl font-bold">{title}</h2>
             </div>
-            {!isReadOnly && (
-              <button onClick={() => openFormModal(moduleName)} className={`${activeTheme.primary} text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium`}>
-                <Plus className="w-4 h-4 mr-2"/> Tambah Data
-              </button>
-            )}
+            <div className="flex flex-wrap gap-2 print:hidden w-full sm:w-auto">
+              {hasExcel && (
+                 <button onClick={triggerExport} className="flex-1 sm:flex-initial bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center"><Download className="w-4 h-4 mr-1.5"/> Excel</button>
+              )}
+              {hasPDF && (
+                 <button onClick={() => window.print()} className="flex-1 sm:flex-initial bg-rose-50 hover:bg-rose-100 text-rose-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center"><Printer className="w-4 h-4 mr-1.5"/> Cetak PDF</button>
+              )}
+              {!isReadOnly && (
+                <button onClick={() => openFormModal(moduleName)} className={`${activeTheme.primary} text-white px-4 py-2 rounded-lg flex items-center text-sm font-bold justify-center`}>
+                  <Plus className="w-4 h-4 mr-1.5"/> Tambah Data
+                </button>
+              )}
+            </div>
           </div>
-          <div className="overflow-x-auto rounded-lg border dark:border-slate-700">
-            <table className="w-full text-left text-sm">
-              <thead className={`uppercase text-[11px] font-bold tracking-wider ${appData.settings?.darkMode ? 'bg-slate-900 text-slate-400' : 'bg-slate-50 text-slate-500'}`}>
+          <div className="overflow-x-auto rounded-lg border dark:border-slate-700 print:overflow-visible print:border-none">
+            <table className="w-full text-left text-sm print:text-xs">
+              <thead className={`uppercase text-[11px] font-bold tracking-wider ${appData.settings?.darkMode ? 'bg-slate-900 text-slate-400' : 'bg-slate-50 text-slate-500'} print:bg-transparent print:text-black`}>
                 <tr>
-                  {columns.map(col => <th key={col.key} className="px-4 py-4">{col.label}</th>)}
-                  {!isReadOnly && <th className="px-4 py-4 text-right">Aksi</th>}
+                  {columns.map(col => <th key={col.key} className="px-4 py-4 print:border-b print:border-slate-300">{col.label}</th>)}
+                  {!isReadOnly && <th className="px-4 py-4 text-right print:hidden">Aksi</th>}
                 </tr>
               </thead>
-              <tbody className={`divide-y ${appData.settings?.darkMode ? 'divide-slate-700 bg-slate-800' : 'divide-slate-200 bg-white'}`}>
+              <tbody className={`divide-y ${appData.settings?.darkMode ? 'divide-slate-700 bg-slate-800' : 'divide-slate-200 bg-white'} print:divide-slate-300 print:bg-transparent`}>
                 {(!data || data.length === 0) ? (
-                  <tr><td colSpan={columns.length + 1} className="text-center py-8 text-slate-400">Belum ada data tercatat.</td></tr>
+                  <tr><td colSpan={columns.length + 1} className="text-center py-8 text-slate-400 print:text-black">Belum ada data tercatat.</td></tr>
                 ) : data.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
+                  <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors print:hover:bg-transparent">
                     {columns.map(col => {
                       const cellValue = col.key === 'tanggal' || col.key === 'tglLahir' ? formatDate(row[col.key]) : col.key === 'waktu' ? formatTime(row[col.key]) : row[col.key];
-                      return <td key={col.key} className="px-4 py-3">{cellValue || '-'}</td>
+                      return <td key={col.key} className="px-4 py-3 print:py-2 print:border-b print:border-slate-300 print:text-black">{cellValue || '-'}</td>
                     })}
                     {!isReadOnly && (
-                      <td className="px-4 py-3 text-right flex justify-end space-x-2">
+                      <td className="px-4 py-3 text-right flex justify-end space-x-2 print:hidden">
                         {onShareWA && <button onClick={() => onShareWA(row)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-md"><Share2 className="w-4 h-4" /></button>}
                         <button onClick={() => openFormModal(moduleName, row)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md"><Edit className="w-4 h-4" /></button>
                         <button onClick={() => handleDeleteItem(moduleName, row.id || row.idWarga)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-md"><Trash2 className="w-4 h-4" /></button>
@@ -551,6 +598,7 @@
               </tbody>
             </table>
           </div>
+          {(hasPDF || hasExcel) && <PrintFooter appData={appData} moduleName={moduleName} />}
         </div>
       );
     };
@@ -909,6 +957,10 @@
                 <div>
                   <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">5. Seksi Perlengkapan (Inventaris)</label>
                   <input type="text" value={appData.settings?.ttdInventaris || ''} onChange={e => handleSaveData('settings', { ...(appData.settings || {}), ttdInventaris: e.target.value })} className="w-full p-2.5 border rounded-xl bg-slate-50 dark:bg-slate-900 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nama Seksi" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">6. Sekretaris (Notulis)</label>
+                  <input type="text" value={appData.settings?.ttdSekretaris || ''} onChange={e => handleSaveData('settings', { ...(appData.settings || {}), ttdSekretaris: e.target.value })} className="w-full p-2.5 border rounded-xl bg-slate-50 dark:bg-slate-900 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nama Sekretaris" />
                 </div>
               </div>
 
@@ -1288,18 +1340,7 @@
     };
 
     function App() {
-      const [currentUser, setCurrentUser] = useState(() => {
-        try {
-          const savedUser = localStorage.getItem('SISTEM_WARGA_USER');
-          if (savedUser) {
-             const parsed = JSON.parse(savedUser);
-             if (parsed && parsed.role) return parsed;
-          }
-        } catch (e) {
-          console.warn("Failed to restore user session");
-        }
-        return WARGA_USER;
-      });
+      const [currentUser, setCurrentUser] = useState(getPersistentUser);
       
       const [currentView, setCurrentView] = useState('dashboard');
       const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1358,14 +1399,7 @@
         // Hapus preloader seketika saat komponen dimuat
         const loader = document.getElementById('root')?.querySelector('div[style*="MEMUAT APLIKASI"]');
         if (loader) {
-            loader.style.opacity = '0';
-            setTimeout(() => loader.style.display = 'none', 300);
-        } else {
-            const preloaderAlt = document.getElementById('app-preloader');
-            if (preloaderAlt) {
-                preloaderAlt.style.opacity = '0';
-                setTimeout(() => preloaderAlt.remove(), 300);
-            }
+            loader.style.display = 'none';
         }
 
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -1373,16 +1407,7 @@
       }, []);
 
       useEffect(() => {
-        try {
-          if (currentUser.role !== ROLES.WARGA) {
-            const userStr = JSON.stringify(currentUser);
-            localStorage.setItem('SISTEM_WARGA_USER', userStr);
-            document.cookie = `SISTEM_WARGA_USER=${encodeURIComponent(userStr)}; max-age=31536000; path=/; SameSite=Lax`;
-          } else {
-            localStorage.removeItem('SISTEM_WARGA_USER');
-            document.cookie = `SISTEM_WARGA_USER=; max-age=0; path=/; SameSite=Lax`;
-          }
-        } catch (e) {}
+        setPersistentUser(currentUser);
       }, [currentUser]);
 
       const fetchFromCloud = async (url) => {
@@ -1470,9 +1495,6 @@
 
         if (user) {
           setCurrentUser(user);
-          try {
-            localStorage.setItem('SISTEM_WARGA_USER', JSON.stringify(user));
-          } catch (e) {}
           setShowLoginModal(false);
           setLoginForm({ username: '', password: '' });
           setCurrentView('dashboard');
@@ -1708,8 +1730,8 @@
           case 'saving': return <BukuArusKas title={getMenuLabel('saving', 'Dana Saving')} moduleName="saving" appData={appData} activeTheme={activeTheme} currentUser={currentUser} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} />;
           case 'agenda': return <DataManager title="Daftar Agenda & Pengumuman" moduleName="agenda" data={Array.isArray(appData.agenda) ? appData.agenda : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} onShareWA={handleShareAgendaAppLevel} columns={[{ key: 'jenisAgenda', label: 'Jenis' }, { key: 'judul', label: 'Perihal' }, { key: 'deskripsi', label: 'Isi', type: 'textarea' }, { key: 'tanggal', label: 'Tanggal' }, { key: 'waktu', label: 'Waktu' }, { key: 'tempat', label: 'Tempat' }]} />;
           case 'pemberitahuanTagihan': return <PemberitahuanTagihan appData={appData} />;
-          case 'notulen': return <DataManager title="Notulen Hasil Rapat Warga" moduleName="notulen" data={Array.isArray(appData.notulen) ? appData.notulen : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} onShareWA={handleShareNotulenAppLevel} columns={[{ key: 'rapat', label: 'Agenda Rapat' }, { key: 'tanggal', label: 'Tanggal' }, { key: 'waktu', label: 'Waktu' }, { key: 'tempat', label: 'Tempat' }, { key: 'jumlahHadir', label: 'Jml Hadir' }, { key: 'hasil', label: 'Hasil' }, { key: 'notulis', label: 'Notulis' }, { key: 'ketua', label: 'Ketua' }]} />;
-          case 'inventaris': return <DataManager title="Daftar Inventaris Lingkungan" moduleName="inventaris" data={Array.isArray(appData.inventaris) ? appData.inventaris : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} columns={[{ key: 'nama', label: 'Nama Aset' }, { key: 'jumlah', label: 'Jml Unit' }, { key: 'kondisi', label: 'Kondisi' }, { key: 'lokasi', label: 'Lokasi' }, { key: 'petugas', label: 'Petugas' }, { key: 'ketua', label: 'Ketua' }]} />;
+          case 'notulen': return <DataManager title="Notulen Hasil Rapat Warga" moduleName="notulen" data={Array.isArray(appData.notulen) ? appData.notulen : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} onShareWA={handleShareNotulenAppLevel} hasPDF={true} columns={[{ key: 'rapat', label: 'Agenda Rapat' }, { key: 'tanggal', label: 'Tanggal' }, { key: 'waktu', label: 'Waktu' }, { key: 'tempat', label: 'Tempat' }, { key: 'jumlahHadir', label: 'Jml Hadir' }, { key: 'hasil', label: 'Hasil' }, { key: 'notulis', label: 'Notulis' }, { key: 'ketua', label: 'Ketua' }]} />;
+          case 'inventaris': return <DataManager title="Daftar Inventaris Lingkungan" moduleName="inventaris" data={Array.isArray(appData.inventaris) ? appData.inventaris : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} hasPDF={true} hasExcel={true} columns={[{ key: 'nama', label: 'Nama Aset' }, { key: 'jumlah', label: 'Jml Unit' }, { key: 'kondisi', label: 'Kondisi' }, { key: 'lokasi', label: 'Lokasi' }, { key: 'petugas', label: 'Petugas' }, { key: 'ketua', label: 'Ketua' }]} />;
           case 'settings': return <SettingsPanel appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} apiUrl={apiUrl} setApiUrl={setApiUrl} openDialog={openDialog} />;
           default: return <Dashboard appData={appData} getMenuLabel={getMenuLabel} isPublic={isPublic} openFormModal={openFormModal} setSelectedItemDetail={setSelectedItemDetail} handleShareAgenda={handleShareAgendaAppLevel} handleShareNotulen={handleShareNotulenAppLevel} />;
         }
@@ -1751,10 +1773,16 @@
                 
                 {/* Live Clock & Login Trigger */}
                 <div className="flex items-center gap-3 md:gap-4 shrink-0">
-                  <ClockWidget currentTime={currentTime} />
-                  <button onClick={() => setShowLoginModal(true)} className="flex items-center text-xs md:text-sm font-bold bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-4 py-2 md:px-5 md:py-2.5 rounded-full transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-                    <Lock className="w-3.5 h-3.5 mr-1.5 hidden md:block" /> Login
-                  </button>
+                  <div className="hidden md:block"><ClockWidget currentTime={currentTime} /></div>
+                  <div className="flex flex-col items-end gap-1">
+                     <button onClick={() => setShowLoginModal(true)} className="flex items-center text-xs md:text-sm font-bold bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-4 py-2 md:px-5 md:py-2.5 rounded-full transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
+                       <Lock className="w-3.5 h-3.5 mr-1.5 hidden md:block" /> Login
+                     </button>
+                     <div className="md:hidden flex items-center text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 px-2 py-0.5 rounded-md mt-0.5">
+                       <Clock className="w-2.5 h-2.5 mr-1 text-indigo-500" />
+                       {currentTime.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})} | {currentTime.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
+                     </div>
+                  </div>
                 </div>
               </div>
             </header>
@@ -1879,12 +1907,17 @@
 
           {/* ADMIN CONTENT CONTAINER */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible">
-            <header className={`border-b h-16 flex items-center justify-between px-4 lg:hidden print:hidden ${appData.settings?.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+            <header className={`border-b h-auto min-h-[64px] py-2 flex items-center justify-between px-4 lg:hidden print:hidden ${appData.settings?.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
               <div className="flex items-center">
                 <button onClick={() => setIsSidebarOpen(true)} className="mr-4 p-1 rounded-lg"><Menu className="w-6 h-6" /></button>
                 <span className="text-base font-bold">Admin Panel</span>
               </div>
-              <ClockWidget currentTime={currentTime} />
+              <div className="flex flex-col items-end">
+                 <div className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md flex items-center mt-1">
+                   <Clock className="w-3 h-3 mr-1 text-indigo-500" />
+                   {currentTime.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})} | {currentTime.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
+                 </div>
+              </div>
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 print:p-0 print:overflow-visible">
@@ -1894,7 +1927,7 @@
                   <p className="text-xs text-slate-500 mt-1 uppercase font-semibold tracking-wider">Akses Masuk: <span className={`${activeTheme.text} font-bold`}>{currentUser.role}</span></p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <SyncStatusWidget apiUrl={apiUrl} isSyncing={isSyncing} />
+                  <SyncStatusWidget apiUrl={apiUrl} />
                   <ClockWidget currentTime={currentTime} />
                 </div>
               </div>
