@@ -53,16 +53,16 @@
 </head>
 <body class="bg-slate-50 text-slate-800">
   <!-- PRELOADER FAST LOADING -->
-  <div id="root">
-    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#64748b;">
-       <svg style="width:40px;height:40px;animation:spin 1s linear infinite;margin-bottom:16px;color:#4f46e5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" stroke-opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-       <span style="font-weight:bold;letter-spacing:0.05em;font-size:12px;">MEMUAT APLIKASI...</span>
-       <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
-    </div>
+  <div id="app-preloader" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#64748b;">
+     <svg style="width:40px;height:40px;animation:spin 1s linear infinite;margin-bottom:16px;color:#4f46e5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" stroke-opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+     <span style="font-weight:bold;letter-spacing:0.05em;font-size:12px;">MEMUAT APLIKASI...</span>
+     <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
   </div>
+  
+  <div id="root"></div>
 
   <script type="text/babel" data-presets="env,react">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useMemo } = React;
     
     // --- ICON WRAPPERS (FontAwesome) ---
     const IconWrapper = (iconClass) => ({ className, title }) => (
@@ -383,7 +383,7 @@
       return (
         <div className="hidden print:flex justify-between w-full mt-24 px-10 text-center text-sm break-inside-avoid">
           <div>
-            <p className="mb-20">Mengetahui,<br/>Ketua {appData.settings?.namaBlok || 'Blok GHIJL'}</p>
+            <p className="mb-20">Mengetahui,<br/>Ketua Blok GHIJL</p>
             <p className="font-bold underline uppercase">{appData.settings?.ttdKetua || '___________________'}</p>
           </div>
           <div>
@@ -552,7 +552,7 @@
 
       const kirimWA = (warga, tunggakan) => {
         const text = `Halo Bapak/Ibu ${warga.nama},\n\nMengingatkan rekapitulasi ${title} tahun ${tahun}. Total Tunggakan: *${formatRupiah(tunggakan)}*.\n\nMohon bantuannya untuk diselesaikan. Terima kasih 🙏\n\n*${appData.settings?.ttdKetua || 'Pengurus Blok'}*`;
-        window.open(`https://wa.me/${warga.noHp.replace(/^0/, '62')}?text=${encodeURIComponent(text)}`, '_blank');
+        window.open(`https://api.whatsapp.com/send?phone=${warga.noHp.replace(/^0/, '62')}&text=${encodeURIComponent(text)}`, '_blank');
       };
 
       return (
@@ -689,7 +689,10 @@
       const ledger = Array.isArray(appData[moduleName]) ? appData[moduleName] : [];
       const isReadOnly = currentUser.role === ROLES.WARGA;
 
-      const calculatedLedger = ledger.map(item => {
+      // Urutkan berdasarkan tanggal (Ascending) agar perhitungan saldo konsisten
+      const sortedLedger = [...ledger].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+
+      const calculatedLedger = sortedLedger.map(item => {
         if (item.jenis === 'Pemasukan') saldoBerjalan += Number(item.nominal);
         else saldoBerjalan -= Number(item.nominal);
         return { ...item, saldo: saldoBerjalan };
@@ -1216,7 +1219,7 @@
         });
 
         const pesan = `Yth. Bapak/Ibu/Sdr *${item.warga.nama}* - Blok *${item.warga.idBlok || item.warga.blok}*\nKami beritahukan bahwa rekap tagihan saudara hingga Bulan *${selectedBulan.toUpperCase()} ${selectedTahun}* sebagai berikut:\n\n${rincianPesan}\n*Total Tagihan: ${formatRupiah(item.total)}*\n\nMohon bantuan dan partisipasinya untuk dapat menyelesaikan pembayaran tersebut. Terima kasih atas dukungan Bapak/Ibu.\n\nTertanda,\n*${appData.settings?.ttdKetua || 'Ketua Pengurus'}*`;
-        window.open(`https://api.whatsapp.com/send?phone=${item.warga.noHp.replace(/^0/, '62')}&text=${encodeURIComponent(pesan)}`, '_blank');
+        window.open(`https://wa.me/${item.warga.noHp.replace(/^0/, '62')}?text=${encodeURIComponent(pesan)}`, '_blank');
       };
 
       return (
@@ -1352,8 +1355,10 @@
         if (!url) return;
         setIsSyncing(true);
         try {
+          // Google Apps Script membutuhkan waktu hingga 15 detik pada Cold Start.
+          // Timeout dilebarkan menjadi 45 detik agar tidak memutus koneksi secara prematur.
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          const timeoutId = setTimeout(() => controller.abort(), 45000); 
           
           const res = await fetch(url, { signal: controller.signal });
           clearTimeout(timeoutId);
@@ -1367,18 +1372,21 @@
                  try {
                    localStorage.setItem('SISTEM_WARGA_DATA', JSON.stringify(merged));
                  } catch (e) {
-                   console.warn("Storage quota exceeded, could not save to localStorage.");
+                   console.warn("Storage quota exceeded, could not save to localStorage.", e);
                  }
                  return merged;
                });
+               // Hapus preloader setelah data awal masuk
+               const loader = document.getElementById('app-preloader');
+               if(loader) loader.style.display = 'none';
             }
-          } catch (jsonErr) {}
+          } catch (jsonErr) {
+            console.error('Gagal membaca JSON dari Google Apps Script.', text.substring(0, 100));
+          }
         } catch (err) {
           console.error('Failed fetching data from GAS:', err);
         } finally {
           setIsSyncing(false);
-          const loader = document.getElementById('root')?.querySelector('div[style*="MEMUAT APLIKASI"]');
-          if(loader) loader.style.display = 'none';
         }
       };
 
@@ -1421,7 +1429,6 @@
 
       const handleLoginSubmit = (e) => {
         e.preventDefault();
-        
         let user = (Array.isArray(appData.users) ? appData.users : []).find(u => String(u.username) === String(loginForm.username) && String(u.password) === String(loginForm.password));
         
         if (!user && loginForm.username === 'superadmin' && loginForm.password === '123') {
@@ -1451,15 +1458,14 @@
 
       const handleShareAgendaAppLevel = (row) => {
         const jenis = row.jenisAgenda || 'UNDANGAN RAPAT BLOK DAN ARISAN';
-        const namaBlok = appData.settings?.namaBlok || 'Warga';
         
-        const text = `*${jenis.toUpperCase()}*\n\nYth.\n*Bapak-Bapak Warga Blok GHIJL*\n\nAssalamualaikum. Wr. Wb\nSalam sejahtera bagi kita semua.\n\nMengharap kehadiran Bapak-Bapak, dalam pertemuan rutin sekaligus arisan warga Blok GHIJL pada:\n\n📅 Hari/Tgl: ${formatDate(row.tanggal)}\n⏰ Waktu: ${formatTime(row.waktu)} WIB\n📍 Tempat: ${row.tempat}\n\nKehadiran dan masukan dari Bapak-Bapak sangat berarti bagi kenyamanan dan kerukunan kita bersama.\n\nDemikian undangan ini kami sampaikan, atas perhatian dan kehadirannya diucapkan terima kasih.\n\nTertanda,\n*${appData.settings?.ttdKetua || row.tertanda}*\n\n_**NB. Apabila berhalangan hadir bisa dititipkan ke tetangga / via TF Rek ke Sie Keamanan**_`;
-        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+        const text = `*${jenis.toUpperCase()}*\n\nYth.\n*Bapak-Bapak Warga Blok GHIJL*\n\nAssalamualaikum. Wr. Wb\nSalam sejahtera bagi kita semua.\n\nMengharap kehadiran Bapak-Bapak, dalam pertemuan rutin sekaligus arisan warga Blok GHIJL pada:\n\n📅 Hari/Tgl: ${formatDate(row.tanggal)}\n⏰ Waktu: ${formatTime(row.waktu)} WIB\n📍 Tempat: ${row.tempat}\n\nKehadiran dan masukan dari Bapak-Bapak sangat berarti bagi kenyamanan dan kerukunan kita bersama.\n\nDemikian undangan ini kami sampaikan, atas perhatian dan kehadirannya diucapkan terima kasih.\n\n\nTertanda,\n*Rizal Pahlepi*\n\n\n_**NB. Apabila berhalangan hadir bisa dititipkan ke tetangga / via TF Rek ke Sie Keamanan**_`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
       };
 
       const handleShareNotulenAppLevel = (row) => {
         const text = `*NOTULEN HASIL RAPAT WARGA*\n\nAgenda: *${row.rapat}*\n\nTelah diselenggarakan pada:\n📅 Hari/Tgl: ${formatDate(row.tanggal)}\n⏰ Waktu: ${formatTime(row.waktu)} WIB\n📍 Tempat: ${row.tempat}\n👥 Hadir: ${row.jumlahHadir} Warga\n\n*Hasil / Keputusan Rapat:*\n${row.hasil}\n\nTertanda,\n*${appData.settings?.ttdKetua || row.tertanda}*`;
-        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
       };
 
       const openFormModal = (type, editingItem = null) => {
@@ -1670,7 +1676,7 @@
           case 'kasRonda': return <BukuArusKas title={getMenuLabel('kasRonda', 'Kas Denda Ronda')} moduleName="kasRonda" appData={appData} activeTheme={activeTheme} currentUser={currentUser} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} />;
           case 'tagihanRonda': return <TagihanManager title={getMenuLabel('tagihanRonda', 'Tagihan Denda Ronda')} moduleName="tagihanRonda" nominalKey="nominalRonda" appData={appData} currentUser={currentUser} toggleTagihanManual={toggleTagihanManual} />;
           case 'saving': return <BukuArusKas title={getMenuLabel('saving', 'Dana Saving')} moduleName="saving" appData={appData} activeTheme={activeTheme} currentUser={currentUser} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} />;
-          case 'agenda': return <DataManager title="Daftar Agenda & Pengumuman" moduleName="agenda" data={Array.isArray(appData.agenda) ? appData.agenda : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} onShareWA={handleShareAgendaAppLevel} columns={[{ key: 'jenisAgenda', label: 'Jenis' }, { key: 'judul', label: 'Perihal' }, { key: 'deskripsi', label: 'Isi', type: 'textarea' }, { key: 'tanggal', label: 'Tanggal' }, { key: 'waktu', label: 'Waktu' }, { key: 'tempat', label: 'Tempat' }, { key: 'tertanda', label: 'Tertanda' }]} />;
+          case 'agenda': return <DataManager title="Daftar Agenda & Pengumuman" moduleName="agenda" data={Array.isArray(appData.agenda) ? appData.agenda : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} onShareWA={handleShareAgendaAppLevel} columns={[{ key: 'jenisAgenda', label: 'Jenis' }, { key: 'judul', label: 'Perihal' }, { key: 'deskripsi', label: 'Isi', type: 'textarea' }, { key: 'tanggal', label: 'Tanggal' }, { key: 'waktu', label: 'Waktu' }, { key: 'tempat', label: 'Tempat' }]} />;
           case 'pemberitahuanTagihan': return <PemberitahuanTagihan appData={appData} />;
           case 'notulen': return <DataManager title="Notulen Hasil Rapat Warga" moduleName="notulen" data={Array.isArray(appData.notulen) ? appData.notulen : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} onShareWA={handleShareNotulenAppLevel} columns={[{ key: 'rapat', label: 'Agenda Rapat' }, { key: 'tanggal', label: 'Tanggal' }, { key: 'waktu', label: 'Waktu' }, { key: 'tempat', label: 'Tempat' }, { key: 'jumlahHadir', label: 'Jml Hadir' }, { key: 'hasil', label: 'Hasil' }, { key: 'tertanda', label: 'Tertanda' }]} />;
           case 'inventaris': return <DataManager title="Daftar Inventaris Lingkungan" moduleName="inventaris" data={Array.isArray(appData.inventaris) ? appData.inventaris : []} appData={appData} handleSaveData={handleSaveData} currentUser={currentUser} activeTheme={activeTheme} openFormModal={openFormModal} handleDeleteItem={handleDeleteItem} columns={[{ key: 'nama', label: 'Nama Aset' }, { key: 'jumlah', label: 'Jml Unit' }, { key: 'kondisi', label: 'Kondisi' }, { key: 'lokasi', label: 'Lokasi' }]} />;
@@ -1858,7 +1864,7 @@
                   <p className="text-xs text-slate-500 mt-1 uppercase font-semibold tracking-wider">Akses Masuk: <span className={`${activeTheme.text} font-bold`}>{currentUser.role}</span></p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <SyncStatusWidget apiUrl={apiUrl} />
+                  <SyncStatusWidget apiUrl={apiUrl} isSyncing={isSyncing} />
                   <ClockWidget currentTime={currentTime} />
                 </div>
               </div>
