@@ -616,6 +616,13 @@
         window.open(`https://wa.me/${warga.noHp.replace(/^0/, '62')}?text=${encodeURIComponent(text)}`, '_blank');
       };
 
+      // MENGURUTKAN WARGA BERDASARKAN BLOK AGAR TETANGGA / PENGGANTI RUMAH BERDEKATAN
+      const sortedWarga = [...(Array.isArray(appData.warga) ? appData.warga : [])].sort((a, b) => {
+         const blokA = a.blok || '';
+         const blokB = b.blok || '';
+         return blokA.localeCompare(blokB);
+      });
+
       return (
         <div className={`rounded-xl shadow-sm border p-6 transition-all ${appData.settings?.darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 print:mb-4">
@@ -645,8 +652,9 @@
                 </tr>
               </thead>
               <tbody className={`divide-y ${appData.settings?.darkMode ? 'divide-slate-700 bg-slate-800' : 'divide-slate-200 bg-white'} print:divide-slate-300 print:bg-transparent`}>
-                {(Array.isArray(appData.warga) ? appData.warga : []).map((w) => {
+                {sortedWarga.map((w) => {
                   const statusBulan = tagihanTahunIni[w.idWarga] || {};
+                  const isNonaktif = w.statusAktif === 'Nonaktif (Pindah/Keluar)';
                   let tunggakan = 0;
 
                   // Kalkulasi Tunggakan (N/A diabaikan)
@@ -667,7 +675,10 @@
                   
                   return (
                     <tr key={w.idWarga} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors print:hover:bg-transparent">
-                      <td className={`px-3 py-2 border-r dark:border-slate-700 print:border-slate-300 font-semibold sticky left-0 z-10 ${appData.settings?.darkMode ? 'bg-slate-800' : 'bg-white'} print:static print:bg-transparent`}>{w.nama}</td>
+                      <td className={`px-3 py-2 border-r dark:border-slate-700 print:border-slate-300 sticky left-0 z-10 ${appData.settings?.darkMode ? (isNonaktif ? 'bg-slate-900 text-slate-500' : 'bg-slate-800 text-slate-100') : (isNonaktif ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-800')} print:static print:bg-transparent`}>
+                        <div className={`font-bold ${isNonaktif ? 'line-through' : ''}`}>{w.nama}</div>
+                        <div className="text-[10px] mt-0.5 font-bold text-indigo-500">{w.blok} {isNonaktif && <span className="text-rose-500 ml-1">(Nonaktif)</span>}</div>
+                      </td>
                       {bulanListGlobal.map(b => {
                         const dataBulan = statusBulan[b];
                         
@@ -720,7 +731,7 @@
                           </td>
                         );
                       })}
-                      <td className="px-3 py-2 border-r dark:border-slate-700 print:border-slate-300 text-right font-bold text-red-500 print:text-black">{formatRupiah(tunggakan)}</td>
+                      <td className={`px-3 py-2 border-r dark:border-slate-700 print:border-slate-300 text-right font-bold print:text-black ${tunggakan > 0 ? 'text-rose-500' : 'text-slate-400'}`}>{formatRupiah(tunggakan)}</td>
                       {!isReadOnly && <td className="px-3 py-2 text-center print:hidden"><button onClick={() => kirimWA(w, tunggakan)} className={`p-2 rounded-md transition-all ${tunggakan > 0 ? 'bg-green-500 hover:bg-green-600 text-white shadow-sm' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`} disabled={tunggakan <= 0}><MessageCircle className="w-4 h-4"/></button></td>}
                     </tr>
                   );
@@ -731,7 +742,7 @@
                    <td className={`px-3 py-4 border-r dark:border-slate-700 print:border-slate-300 text-right font-extrabold sticky left-0 z-40 ${appData.settings?.darkMode ? 'bg-slate-900' : 'bg-slate-200'} print:static print:bg-transparent`}>TOTAL PEMASUKAN</td>
                    {bulanListGlobal.map(b => {
                       let sum = 0;
-                      (Array.isArray(appData.warga) ? appData.warga : []).forEach(w => {
+                      sortedWarga.forEach(w => {
                          const d = tagihanTahunIni[w.idWarga]?.[b];
                          if (isRonda) {
                             if (d && Number(d.dibayar) > 0 && d !== 'N/A') sum += Number(d.dibayar);
@@ -1258,7 +1269,9 @@
 
       const targetMonthIdx = bulanListGlobal.indexOf(selectedBulan);
 
-      const rekapWarga = (Array.isArray(appData.warga) ? appData.warga : []).map(w => {
+      const rekapWarga = (Array.isArray(appData.warga) ? appData.warga : [])
+        .filter(w => w.statusAktif !== 'Nonaktif (Pindah/Keluar)')
+        .map(w => {
         let detailTagihan = [];
         let total = 0;
 
@@ -1269,12 +1282,12 @@
            const jimpitanPaid = appData.tagihanJimpitan?.[selectedTahun]?.[w.idWarga]?.[b];
            const rondaStatus = appData.tagihanRonda?.[selectedTahun]?.[w.idWarga]?.[b];
 
-           if (!iuranPaid) {
+           if (!iuranPaid && iuranPaid !== 'N/A') {
              const nom = Number(appData.settings?.nominalIuran) || 0;
              detailTagihan.push({ nama: `Iuran (${b.toUpperCase()})`, nominal: nom });
              total += nom;
            }
-           if (!jimpitanPaid) {
+           if (!jimpitanPaid && jimpitanPaid !== 'N/A') {
              const nom = (Number(appData.settings?.nominalJimpitan) || 0) * getDaysInMonth(b, selectedTahun);
              detailTagihan.push({ nama: `Jimpitan (${b.toUpperCase()})`, nominal: nom });
              total += nom;
@@ -1321,7 +1334,7 @@
 
           <div className="space-y-4">
             {rekapWarga.length === 0 ? (
-              <p className="text-center py-10 text-slate-400 font-bold">Luar Biasa! Semua warga telah melunasi tagihan hingga bulan ini.</p>
+              <p className="text-center py-10 text-slate-400 font-bold">Luar Biasa! Semua warga aktif telah melunasi tagihan hingga bulan ini.</p>
             ) : rekapWarga.map((item, index) => (
               <div key={index} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 rounded-2xl border dark:border-slate-700 bg-slate-50/50">
                 <div>
