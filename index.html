@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sistem Informasi Warga</title>
+  <title>NdhodroApp</title>
   
   <!-- Load React & ReactDOM via CDN -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -56,7 +56,7 @@
   <div id="root">
     <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#64748b;">
        <svg style="width:40px;height:40px;animation:spin 1s linear infinite;margin-bottom:16px;color:#4f46e5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" stroke-opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-       <span style="font-weight:bold;letter-spacing:0.05em;font-size:12px;">MEMUAT APLIKASI...</span>
+       <span style="font-weight:bold;letter-spacing:0.05em;font-size:12px;">MEMUAT NDHODROAPP...</span>
        <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
     </div>
   </div>
@@ -1152,6 +1152,7 @@
       const totalWarga = wargaList.length;
       const tetapCount = wargaList.filter(w => w.statusWarga === 'Penghuni Tetap').length;
       const kontrakCount = wargaList.filter(w => w.statusWarga === 'Kontrak').length;
+      const kosongCount = wargaList.filter(w => w.statusWarga === 'Rumah Kosong (Tak Berpenghuni)').length;
 
       return (
         <div className="space-y-6 animate-fade-in">
@@ -1164,10 +1165,11 @@
           </div>
 
           {/* Baris Tambahan: REKAP STATUS WARGA */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <Widget title="Total Kepala Keluarga" value={`${totalWarga} Keluarga`} icon={Users} bgClass="bg-slate-100 dark:bg-slate-800" textClass="text-slate-600 dark:text-slate-400" />
-            <Widget title="Warga Penghuni Tetap" value={`${tetapCount} Keluarga`} icon={CheckSquare} bgClass="bg-emerald-50 dark:bg-emerald-900/30" textClass="text-emerald-600 dark:text-emerald-400" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <Widget title="Jumlah Warga" value={`${totalWarga} Data`} icon={Users} bgClass="bg-slate-100 dark:bg-slate-800" textClass="text-slate-600 dark:text-slate-400" />
+            <Widget title="Penghuni Tetap" value={`${tetapCount} Keluarga`} icon={CheckSquare} bgClass="bg-emerald-50 dark:bg-emerald-900/30" textClass="text-emerald-600 dark:text-emerald-400" />
             <Widget title="Warga Kontrak" value={`${kontrakCount} Keluarga`} icon={Clock} bgClass="bg-amber-50 dark:bg-amber-900/30" textClass="text-amber-600 dark:text-amber-400" />
+            <Widget title="Rumah Kosong" value={`${kosongCount} Rumah`} icon={Moon} bgClass="bg-rose-50 dark:bg-rose-900/30" textClass="text-rose-600 dark:text-rose-400" />
           </div>
 
           {/* Baris 2: AGENDA & NOTULEN */}
@@ -1311,7 +1313,8 @@
           rincianPesan += `${idx + 1}. ${det.nama}: ${formatRupiah(det.nominal)}\n`;
         });
 
-        const pesan = `Yth. Bapak/Ibu/Sdr *${item.warga.nama}* - Blok *${item.warga.idBlok || item.warga.blok}*\nKami beritahukan bahwa rekap tagihan saudara hingga Bulan *${selectedBulan.toUpperCase()} ${selectedTahun}* sebagai berikut:\n\n${rincianPesan}\n*Total Tagihan: ${formatRupiah(item.total)}*\n\nMohon bantuan dan partisipasinya untuk dapat menyelesaikan pembayaran tersebut. Terima kasih atas dukungan Bapak/Ibu.\n\nTertanda,\n*${appData.settings?.ttdKetua || 'Ketua Pengurus'}*`;
+        const ttdKetua = appData.settings?.ttdKetua || 'Ketua Pengurus';
+        const pesan = `Yth.\nBapak/Ibu/Sdr *${item.warga.nama}* - Blok *${item.warga.idBlok || item.warga.blok}*\n\nKami beritahukan bahwa rekap tagihan saudara hingga Bulan *${selectedBulan.toUpperCase()} ${selectedTahun}* sebagai berikut:\n\n${rincianPesan}\n*Total Tagihan: ${formatRupiah(item.total)}*\n\nMohon bantuan dan partisipasinya untuk dapat menyelesaikan pembayaran tersebut. Terima kasih atas dukungan Bapak/Ibu.\n\nTertanda,\n*${ttdKetua}*\n\n*NB. Apabila berhalangan hadir bisa dititipkan ke tetangga / via TF Rek ke Sie Keamanan*`;
         window.open(`https://wa.me/${item.warga.noHp.replace(/^0/, '62')}?text=${encodeURIComponent(pesan)}`, '_blank');
       };
 
@@ -1417,7 +1420,7 @@
 
       useEffect(() => {
         // Hapus preloader seketika saat komponen dimuat
-        const loader = document.getElementById('root')?.querySelector('div[style*="MEMUAT APLIKASI"]');
+        const loader = document.getElementById('root')?.querySelector('div[style*="MEMUAT NDHODROAPP"]');
         if (loader) {
             loader.style.display = 'none';
         }
@@ -2031,6 +2034,7 @@
                             <option value="">Pilih Status...</option>
                             <option value="Penghuni Tetap">Penghuni Tetap</option>
                             <option value="Kontrak">Kontrak</option>
+                            <option value="Rumah Kosong (Tak Berpenghuni)">Rumah Kosong (Tak Berpenghuni)</option>
                           </select>
                         </div>
                         <div>
